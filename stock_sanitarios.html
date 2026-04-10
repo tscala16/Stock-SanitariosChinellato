@@ -429,8 +429,6 @@ function initFirebase(){
     if(importing) return; // No sobreescribir durante importacion
     if(snap.exists()){
       const data = snap.data();
-      // Si version no es v2, resetear con productos iniciales
-      if(data.version!=='v2'){ st.products=PRODUCTOS_INICIALES; st.nextId=21; saveToFirebase(); return; }
       st.products  = data.products  || [];
       st.depositos = data.depositos || DEPS_DEFAULT.slice();
       st.nextId = data.nextId || 21;
