@@ -720,23 +720,10 @@ function pXLS(file){
       st.products=st.products.filter(p=>idExcel.has(p.id)||nomExcel.has(nm(p.nombre)));
       const eli=antes-st.products.length;
       if(eli>0)log.push('ELIMINADOS: '+eli);
-      // Guardar en Firebase con productos completos
-      const productosFinales = st.products.slice(); // copia defensiva
-      const nextIdFinal = st.nextId;
-      importing = true; // mantener bloqueado hasta confirmar guardado
-
-      setDoc(doc(db,'stock','state'),{
-        products: productosFinales,
-        depositos: st.depositos,
-        nextId: nextIdFinal,
-        updatedAt: new Date().toISOString()
-      }).then(function(){
-        st.products = productosFinales;
-        st.nextId = nextIdFinal;
+      // Guardar en Firebase
+      saveToFirebase().then(function(){
         importing = false;
-        setSave('saved');
         rS(); rDeps();
-        toast('Import guardado: '+upd+' actualizados, '+creat+' nuevos');
       }).catch(function(err){
         importing = false;
         toast('Error guardando: '+err.message);
