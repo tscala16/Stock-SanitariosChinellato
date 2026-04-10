@@ -212,13 +212,28 @@ tr:hover td{background:var(--sf2)}
     </div>
 
     <div id="view-hist" class="view">
-      <div class="tb">
-        <input class="si2" type="text" placeholder="Buscar..." oninput="rH()" id="hsrch">
+      <div class="tb" style="margin-bottom:10px">
+        <input class="si2" type="text" placeholder="Buscar producto o nota..." oninput="rH()" id="hsrch">
         <select class="fs" onchange="rH()" id="hft">
-          <option value="">Todos</option><option value="entrada">Entradas</option><option value="salida">Salidas</option><option value="traslado">Traslados</option><option value="ajuste">Ajustes</option><option value="excel">Excel</option>
+          <option value="">Todos los tipos</option>
+          <option value="entrada">Entradas</option>
+          <option value="salida">Salidas</option>
+          <option value="traslado">Traslados</option>
+          <option value="ajuste">Ajustes</option>
+          <option value="excel">Excel</option>
         </select>
-        <button class="btn bg2" onclick="clH()">Limpiar</button>
+        <select class="fs" onchange="rH()" id="hfdep">
+          <option value="">Todos los depositos</option>
+        </select>
+        <select class="fs" onchange="rH()" id="hffecha">
+          <option value="">Toda la fecha</option>
+          <option value="hoy">Hoy</option>
+          <option value="semana">Esta semana</option>
+          <option value="mes">Este mes</option>
+        </select>
+        <button class="btn bg2" onclick="clH()">Limpiar todo</button>
       </div>
+      <div id="hist-count" style="font-size:12px;color:var(--tx2);font-family:var(--mono);margin-bottom:12px"></div>
       <div id="hlist"></div>
     </div>
 
@@ -742,19 +757,87 @@ function pXLS(file){
 }
 
 function rH(){
-  const q=document.getElementById('hsrch').value.toLowerCase(),t=document.getElementById('hft').value;
-  const list=st.historial.filter(h=>(!q||h.productoNombre.toLowerCase().includes(q)||(h.nota||'').toLowerCase().includes(q))&&(!t||h.tipo===t));
+  const q=document.getElementById('hsrch').value.toLowerCase();
+  const t=document.getElementById('hft').value;
+  const dep=document.getElementById('hfdep').value;
+  const fecha=document.getElementById('hffecha').value;
+
+  // Populate deposito filter
+  const depSel=document.getElementById('hfdep');
+  const curDep=depSel.value;
+  depSel.innerHTML='<option value="">Todos los depositos</option>'+st.depositos.map(d=>`<option value="${d}">${d}</option>`).join('');
+  depSel.value=curDep;
+
+  const ahora=new Date();
+  const hoyStr=ahora.toDateString();
+  const lunesStr=new Date(ahora.setDate(ahora.getDate()-ahora.getDay()+1)).toDateString();
+
+  const list=st.historial.filter(function(h){
+    if(q&&!h.productoNombre.toLowerCase().includes(q)&&!(h.nota||'').toLowerCase().includes(q)) return false;
+    if(t&&h.tipo!==t) return false;
+    if(dep&&h.deposito!==dep&&h.depositoDestino!==dep) return false;
+    if(fecha){
+      const hf=new Date(h.fecha);
+      if(fecha==='hoy'&&hf.toDateString()!==new Date().toDateString()) return false;
+      if(fecha==='semana'){
+        const lunes=new Date(); lunes.setDate(lunes.getDate()-lunes.getDay()+1); lunes.setHours(0,0,0,0);
+        if(hf<lunes) return false;
+      }
+      if(fecha==='mes'){
+        const n=new Date(); if(hf.getMonth()!==n.getMonth()||hf.getFullYear()!==n.getFullYear()) return false;
+      }
+    }
+    return true;
+  });
+
   const el=document.getElementById('hlist');
+  const countEl=document.getElementById('hist-count');
+  countEl.textContent=list.length+' movimiento'+(list.length!==1?'s':'');
+
   if(!list.length){el.innerHTML='<div class="empty"><div style="font-size:40px;margin-bottom:12px">📋</div><div>No hay movimientos</div></div>';return;}
+
   const icons={entrada:'↑',salida:'↓',ajuste:'⚙',excel:'X',traslado:'↔'};
-  el.innerHTML=list.map(h=>{
-    const d=new Date(h.fecha),ds=d.toLocaleDateString('es-AR')+' '+d.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+  const tipoLabel={entrada:'Entrada',salida:'Salida',ajuste:'Ajuste',excel:'Excel',traslado:'Traslado'};
+
+  el.innerHTML=list.map(function(h){
+    const d=new Date(h.fecha);
+    // Fecha formateada: Lunes 7 de abril, 2026 - 14:35
+    const diasSemana=['Domingo','Lunes','Martes','Miercoles','Jueves','Viernes','Sabado'];
+    const meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const diaStr=diasSemana[d.getDay()]+' '+d.getDate()+' de '+meses[d.getMonth()]+', '+d.getFullYear();
+    const horaStr=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
     const tc=h.tipo==='traslado'||h.tipo==='ajuste'||h.tipo==='excel'?'ajuste':h.tipo;
-    const meta=h.tipo==='traslado'?h.deposito+' > '+(h.depositoDestino||'')+(h.nota?' - '+h.nota:''):h.deposito+(h.nota?' - '+h.nota:'');
+    const meta=h.tipo==='traslado'?h.deposito+' → '+(h.depositoDestino||'')+(h.nota?' · '+h.nota:''):h.deposito+(h.nota?' · '+h.nota:'');
     const qty=h.tipo==='traslado'?''+h.cantidad:(h.cantidad>0?'+':'')+h.cantidad;
-    return `<div class="hi"><div class="hic ${tc}">${icons[h.tipo]||'-'}</div><div class="hn"><div class="hnm">${h.productoNombre}</div><div class="hmt">${meta}</div></div><div class="hq ${tc}">${qty}</div><div class="hd">${ds}</div></div>`;
+    const id=h._id||'';
+    return '<div class="hi" style="position:relative">'+
+      '<div class="hic '+tc+'">'+icons[h.tipo]+'</div>'+
+      '<div class="hn">'+
+        '<div class="hnm">'+h.productoNombre+'</div>'+
+        '<div class="hmt">'+meta+'</div>'+
+        '<div style="font-size:10px;color:var(--tx2);font-family:var(--mono);margin-top:2px">'+
+          '<span style="background:var(--sf2);border:1px solid var(--br);border-radius:3px;padding:1px 5px;margin-right:4px">'+tipoLabel[h.tipo]+'</span>'+
+          diaStr+' · '+horaStr+'hs'+
+        '</div>'+
+      '</div>'+
+      '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">'+
+        '<div class="hq '+tc+'">'+qty+'</div>'+
+        (id?('<button data-hid="'+id+'" onclick="delM(this)" style="background:none;border:none;cursor:pointer;color:var(--er);font-size:11px;padding:2px 6px;border-radius:4px;border:1px solid var(--erl)">x eliminar</button>'):'')
+      +'</div>'+
+    '</div>';
   }).join('');
 }
+
+function delM(btn){ delMovimiento(btn.getAttribute('data-hid')); }
+async function delMovimiento(id){
+  if(!id){toast('No se puede eliminar este movimiento');return;}
+  try{
+    await deleteDoc(doc(db,'stock','historial','entries',id));
+    st.historial=st.historial.filter(function(h){return h._id!==id;});
+    rH();toast('Movimiento eliminado');
+  }catch(e){toast('Error al eliminar: '+e.message);}
+}
+
 async function clH(){
   try{
     const snap=await getDocs(collection(db,'stock','historial','entries'));
